@@ -16,6 +16,14 @@ const appData = {
     ],
     wellnessScore: 69
 };
+// Reminders will be stored here (persisted to localStorage)
+appData.reminders = [
+    { id: 'drink', icon: '💧', text: 'Time to drink water', time: '' },
+    { id: 'posture', icon: '🧘', text: 'Check posture', time: '' },
+    { id: 'vitamin', icon: '💊', text: 'Vitamin time', time: '14:00' }
+];
+// mode: 'auto' or 'manual'
+appData.reminderMode = 'auto';
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', function() {
@@ -30,7 +38,139 @@ function initializeApp() {
     updateHydrationTab();
     updatePostureTab();
     updateSummaryTab();
+    loadReminders();
+    renderReminders();
+    applyReminderModeToUI();
     setInterval(updateDateTime, 1000);
+}
+
+function applyReminderModeToUI() {
+    const toggle = document.getElementById('reminder-mode-toggle');
+    const text = document.getElementById('reminder-mode-text');
+    if (!toggle) return;
+    const mode = localStorage.getItem('welldesk-reminder-mode') || appData.reminderMode || 'auto';
+    appData.reminderMode = mode;
+    toggle.checked = mode === 'auto';
+    if (text) text.textContent = mode === 'auto' ? 'Auto' : 'Manual';
+}
+
+function toggleReminderMode() {
+    const toggle = document.getElementById('reminder-mode-toggle');
+    const text = document.getElementById('reminder-mode-text');
+    if (!toggle) return;
+    const mode = toggle.checked ? 'auto' : 'manual';
+    appData.reminderMode = mode;
+    if (text) text.textContent = mode === 'auto' ? 'Auto' : 'Manual';
+    localStorage.setItem('welldesk-reminder-mode', mode);
+    renderReminders();
+}
+
+// ---------------- Reminders ----------------
+function loadReminders() {
+    try {
+        const stored = localStorage.getItem('welldesk-reminders');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+                appData.reminders = parsed;
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to load reminders', e);
+    }
+}
+
+function saveReminders() {
+    try {
+        localStorage.setItem('welldesk-reminders', JSON.stringify(appData.reminders));
+    } catch (e) {
+        console.warn('Failed to save reminders', e);
+    }
+}
+
+function formatTimeHHMM(hhmm) {
+    if (!hhmm) return '';
+    const [hh, mm] = hhmm.split(':');
+    const d = new Date();
+    d.setHours(parseInt(hh, 10), parseInt(mm, 10), 0, 0);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderReminders() {
+    const list = document.getElementById('reminder-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const mode = appData.reminderMode || 'auto';
+    appData.reminders.forEach(r => {
+        const div = document.createElement('div');
+        div.className = 'reminder-item';
+        if (mode === 'auto') {
+            // In auto mode show next occurrence (computed) and disable edit
+            const nextText = computeNextForReminder(r);
+            div.innerHTML = `
+                <span class="reminder-icon">${r.icon}</span>
+                <span class="reminder-text">${r.text}</span>
+                <span class="time">${nextText}</span>
+            `;
+        } else {
+            const displayTime = r.time ? formatTimeHHMM(r.time) : 'Not set';
+            div.innerHTML = `
+                <span class="reminder-icon">${r.icon}</span>
+                <span class="reminder-text">${r.text}</span>
+                <span class="time" id="reminder-time-${r.id}">${displayTime}</span>
+                <div style="margin-left:8px;display:flex;gap:8px">
+                    <button class="btn btn-secondary" onclick="editReminder('${r.id}')">Edit</button>
+                </div>
+            `;
+        }
+        list.appendChild(div);
+    });
+}
+
+function computeNextForReminder(r) {
+    // For water and posture, use intervals; for vitamin use set time if provided
+    const now = new Date();
+    if (r.id === 'vitamin') {
+        if (r.time) {
+            const [hh, mm] = r.time.split(':').map(Number);
+            const target = new Date(now);
+            target.setHours(hh, mm, 0, 0);
+            if (target < now) target.setDate(target.getDate() + 1);
+            const mins = Math.round((target - now) / 60000);
+            return mins <= 60 ? `In ${mins} min` : formatTimeHHMM(r.time);
+        }
+        return 'Not set';
+    }
+
+    // default intervals
+    const intervalMins = r.id === 'drink' ? 60 : 30;
+    return `Every ${intervalMins} min`;
+}
+
+function editReminder(id) {
+    const r = appData.reminders.find(x => x.id === id);
+    if (!r) return;
+    const timeSpan = document.getElementById(`reminder-time-${id}`);
+    if (!timeSpan) return;
+    const current = r.time || '09:00';
+    timeSpan.innerHTML = `
+        <input type="time" id="time-input-${id}" value="${current}" style="margin-right:8px">
+        <button class="btn btn-primary" onclick="saveReminder('${id}')">Save</button>
+        <button class="btn btn-secondary" onclick="renderReminders()">Cancel</button>
+    `;
+}
+
+function saveReminder(id) {
+    const input = document.getElementById(`time-input-${id}`);
+    if (!input) return;
+    const newTime = input.value;
+    const r = appData.reminders.find(x => x.id === id);
+    if (!r) return;
+    r.time = newTime;
+    saveReminders();
+    renderReminders();
+    showFeedback('Reminder saved');
 }
 
 // Tab Navigation
@@ -113,9 +253,22 @@ function updateDashboard() {
     const postureScore = appData.postureQuality;
     const wellnessScore = Math.round((hydrationScore * 0.4 + postureScore * 0.6));
 
-    document.getElementById('hydration-score').textContent = Math.min(hydrationScore, 100);
-    document.getElementById('posture-score').textContent = postureScore;
-    document.getElementById('wellness-score').textContent = wellnessScore;
+    // Update hydration score safely
+    const hydrationEl = document.getElementById('hydration-score');
+    if (hydrationEl) hydrationEl.textContent = Math.min(hydrationScore, 100);
+
+    // Show posture as a clean integer to avoid long floats
+    const postureDisplay = Math.round(postureScore);
+    const postureEl = document.getElementById('posture-score');
+    if (postureEl) postureEl.textContent = postureDisplay;
+
+    // Update wellness score safely
+    const wellnessEl = document.getElementById('wellness-score');
+    if (wellnessEl) wellnessEl.textContent = wellnessScore;
+
+    // Ensure summary reflects the latest computed wellness score
+    appData.wellnessScore = wellnessScore;
+    updateSummaryTab();
     
     appData.wellnessScore = wellnessScore;
 }
@@ -142,14 +295,22 @@ function updateHydrationTab() {
     
     // Update progress bar
     const progressFill = document.querySelector('.progress-fill');
+    const progressBar = document.querySelector('.progress-bar');
     if (progressFill) {
         progressFill.style.width = cappedPercentage + '%';
+    }
+    if (progressBar) {
+        progressBar.setAttribute('aria-valuenow', cappedPercentage);
     }
     
     // Update water ml display
     const waterMlElement = document.getElementById('water-ml');
     if (waterMlElement) {
-        waterMlElement.textContent = appData.waterIntake;
+        waterMlElement.textContent = appData.waterIntake + ' ml';
+    }
+    const waterGoalEl = document.getElementById('water-goal');
+    if (waterGoalEl) {
+        waterGoalEl.textContent = appData.waterGoal + ' ml';
     }
     
     // Update cup
@@ -183,30 +344,34 @@ function updateHydrationTab() {
 
 // ============ POSTURE ============
 function updatePostureTab() {
-    const goodPosturePercentage = appData.postureQuality;
-    const postureStatusText = document.getElementById('posture-status-text');
-    const postureIndicator = document.querySelector('.posture-dot');
-    
-    // Update status based on quality
-    if (goodPosturePercentage >= 80) {
-        if (postureStatusText) postureStatusText.textContent = 'Good Posture';
-        if (postureIndicator) postureIndicator.style.backgroundColor = '#10b981'; // green
-    } else if (goodPosturePercentage >= 60) {
-        if (postureStatusText) postureStatusText.textContent = 'Fair Posture';
-        if (postureIndicator) postureIndicator.style.backgroundColor = '#f59e0b'; // orange
-    } else {
-        if (postureStatusText) postureStatusText.textContent = 'Poor Posture';
-        if (postureIndicator) postureIndicator.style.backgroundColor = '#ef4444'; // red
+    try {
+        const goodPosturePercentage = appData.postureQuality;
+        const postureStatusText = document.getElementById('posture-status-text');
+        const postureIndicator = document.querySelector('.posture-dot');
+        
+        // Update status based on quality
+        if (goodPosturePercentage >= 80) {
+            if (postureStatusText) postureStatusText.textContent = 'Good Posture';
+            if (postureIndicator) postureIndicator.style.backgroundColor = '#10b981'; // green
+        } else if (goodPosturePercentage >= 60) {
+            if (postureStatusText) postureStatusText.textContent = 'Fair Posture';
+            if (postureIndicator) postureIndicator.style.backgroundColor = '#f59e0b'; // orange
+        } else {
+            if (postureStatusText) postureStatusText.textContent = 'Poor Posture';
+            if (postureIndicator) postureIndicator.style.backgroundColor = '#ef4444'; // red
+        }
+        
+        // Update metrics (rounded values for readability)
+        const spineAngleElement = document.getElementById('spine-angle');
+        if (spineAngleElement) {
+            spineAngleElement.textContent = (45 + (goodPosturePercentage / 100) * 5).toFixed(1) + '°';
+        }
+        
+        // Draw posture chart
+        drawPostureChart();
+    } catch (e) {
+        console.error('Error updating posture tab', e);
     }
-    
-    // Update metrics
-    const spineAngleElement = document.getElementById('spine-angle');
-    if (spineAngleElement) {
-        spineAngleElement.textContent = (45 + (goodPosturePercentage / 100) * 5).toFixed(2) + '°';
-    }
-    
-    // Draw posture chart
-    drawPostureChart();
 }
 
 function drawPostureChart() {
@@ -277,6 +442,8 @@ function drawPostureChart() {
 function simulatePostureChange() {
     const randomChange = (Math.random() - 0.5) * 10;
     appData.postureQuality = Math.max(50, Math.min(100, appData.postureQuality + randomChange));
+    // Keep stored postureQuality to a single decimal to prevent long floats
+    appData.postureQuality = parseFloat(appData.postureQuality.toFixed(1));
     updatePostureTab();
     updateDashboard();
 }
@@ -286,19 +453,26 @@ setInterval(simulatePostureChange, 15000);
 
 // ============ SUMMARY ============
 function updateSummaryTab() {
-    const overallScore = appData.wellnessScore;
-    
-    // Update overall score
-    const scoreRing = document.getElementById('score-ring');
-    if (scoreRing) {
-        const percentage = overallScore / 100;
-        const circumference = 282;
-        scoreRing.style.strokeDashoffset = circumference * (1 - percentage);
-    }
-    
-    const scoreNumberElement = document.getElementById('overall-score');
-    if (scoreNumberElement) {
-        scoreNumberElement.textContent = overallScore;
+    try {
+        const overallScore = appData.wellnessScore;
+        
+        // Update overall score
+        const scoreRing = document.getElementById('score-ring');
+        if (scoreRing) {
+            // compute circumference based on radius to avoid hardcoded values
+            const r = parseFloat(scoreRing.getAttribute('r')) || 45;
+            const circumference = 2 * Math.PI * r;
+            const percentage = Math.max(0, Math.min(1, overallScore / 100));
+            scoreRing.style.strokeDasharray = String(circumference);
+            scoreRing.style.strokeDashoffset = String(circumference * (1 - percentage));
+        }
+        
+        const scoreNumberElement = document.getElementById('overall-score');
+        if (scoreNumberElement) {
+            scoreNumberElement.textContent = overallScore;
+        }
+    } catch (e) {
+        console.error('Error updating summary tab', e);
     }
 }
 

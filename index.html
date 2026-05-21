@@ -3,21 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welldesk</title>
+    <title>Welldesk — Daily Wellness Assistant</title>
+    <meta name="description" content="Welldesk helps you track hydration, posture, and daily wellness with gentle reminders and insights.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <!-- Header -->
-        <header class="header">
+        <header class="header" role="banner">
             <div class="header-content">
-                <div>
-                    <h1>Welldesk</h1>
-                    <p class="subtitle">Your Daily Wellness Assistant</p>
+                <div class="brand">
+                    <div class="logo" aria-hidden="true">WD</div>
+                    <div>
+                        <h1>Welldesk</h1>
+                        <p class="subtitle">Your Daily Wellness Assistant</p>
+                    </div>
                 </div>
-                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
-                    <span class="theme-icon">🌙</span>
-                </button>
+
+                <div class="header-actions">
+                    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                        <span class="theme-icon">🌙</span>
+                    </button>
+                </div>
             </div>
         </header>
 
@@ -73,22 +81,18 @@
                 <!-- Reminders -->
                 <div class="card">
                     <h3>Active Reminders</h3>
-                    <div class="reminder-list">
-                        <div class="reminder-item">
-                            <span class="reminder-icon">💧</span>
-                            <span>Time to drink water</span>
-                            <span class="time">In 15 min</span>
+                    <div class="reminder-controls" style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                        <label class="toggle-label">Mode:</label>
+                        <div class="switch">
+                            <input type="checkbox" id="reminder-mode-toggle" aria-label="Toggle reminder mode" onchange="toggleReminderMode()">
+                            <span class="slider"></span>
                         </div>
-                        <div class="reminder-item">
-                            <span class="reminder-icon">🧘</span>
-                            <span>Check posture</span>
-                            <span class="time">In 30 min</span>
-                        </div>
-                        <div class="reminder-item">
-                            <span class="reminder-icon">💊</span>
-                            <span>Vitamin time</span>
-                            <span class="time">In 2 hrs</span>
-                        </div>
+                        <div id="reminder-mode-text" style="font-weight:600;color:var(--text-light)">Auto</div>
+                        <div style="margin-left:auto;color:var(--text-light);font-size:13px">Auto: scheduled • Manual: editable</div>
+                    </div>
+
+                    <div class="reminder-list" id="reminder-list">
+                        <!-- Populated dynamically by JS. Click Edit to change times. -->
                     </div>
                 </div>
             </div>
@@ -96,37 +100,44 @@
 
         <!-- Hydration Tab -->
         <section class="tab-content" id="hydration">
-            <div class="hydration-container">
-                <div class="card">
-                    <h2>Hydration Tracker</h2>
-                    
-                    <!-- Water Intake Progress -->
-                    <div class="progress-section">
-                        <h3>Daily Water Intake</h3>
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="water-progress"></div>
-                        </div>
-                        <div class="progress-text">
-                            <span id="water-ml">0 ml</span> / <span id="water-goal">2000 ml</span>
-                        </div>
-                    </div>
+            <section class="hydration-container">
+                    <div class="card">
+                        <h2>Hydration Tracker</h2>
 
-                    <!-- Cup Image -->
-                    <div class="cup-container">
-                        <div class="cup" id="cup">
-                            <div class="water-level" id="water-level"></div>
-                            <span id="cup-percentage">0%</span>
+                        <!-- Water Intake Progress -->
+                        <div class="progress-section">
+                            <h3>Daily Water Intake</h3>
+                            <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                <div class="progress-fill" id="water-progress"></div>
+                            </div>
+                            <div class="progress-text">
+                                <span id="water-ml">0 ml</span> / <span id="water-goal">2000 ml</span>
+                            </div>
                         </div>
-                    </div>
 
-                    <!-- Hydration History -->
-                    <h3 style="margin-top: 30px;">Hydration History</h3>
-                    <div class="history-list" id="hydration-history">
-                        <!-- Populated by JS -->
+                        <!-- Quick Add Buttons -->
+                        <div class="button-group" role="group" aria-label="Quick add water">
+                            <button class="btn btn-secondary" onclick="addWater(200)" aria-label="Add 200 milliliters">+200ml</button>
+                            <button class="btn btn-primary" onclick="addWater(250)" aria-label="Add 250 milliliters">+250ml</button>
+                            <button class="btn btn-secondary" onclick="addWater(500)" aria-label="Add 500 milliliters">+500ml</button>
+                        </div>
+
+                        <!-- Cup Image -->
+                        <div class="cup-container">
+                            <div class="cup" id="cup" aria-hidden="true">
+                                <div class="water-level" id="water-level"></div>
+                                <span id="cup-percentage">0%</span>
+                            </div>
+                        </div>
+
+                        <!-- Hydration History -->
+                        <h3 style="margin-top: 30px;">Hydration History</h3>
+                        <div class="history-list" id="hydration-history">
+                            <!-- Populated by JS -->
+                        </div>
                     </div>
                 </div>
-            </div>
-        </section>
+            </section>
 
         <!-- Posture Tab -->
         <section class="tab-content" id="posture">
